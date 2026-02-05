@@ -24,13 +24,13 @@ This script uses specific JIS keyboard scan codes to bypass application-level ca
 - **JIS Eisu (102)**: Forces English input mode.
 - **JIS Kana (104)**: Forces Japanese input mode.
 
-If you are using a different keyboard layout (e.g., US, ISO) or want to target different input methods, you can modify the `SOURCES` and `KEYCODES` constants in `init.lua` accordingly.
+If you are using a different keyboard layout (e.g., US, ISO) or want to target different input methods, you can modify the `CONFIG` table in `init.lua` accordingly.
 
 このスクリプトは、アプリ層のキャッシュを回避するために特定のJISキーコードを使用しています：
 - **JIS英数 (102)**: 英数入力モードを強制します。
 - **JISかな (104)**: 日本語入力モードを強制します。
 
-他のキーボード配列（US配列やISO配列など）を使用している場合や、別の入力ソースを対象にする場合は、`init.lua` 内の `SOURCES` および `KEYCODES` 定数を適宜書き換えてカスタマイズしてください。
+他のキーボード配列（US配列やISO配列など）を使用している場合や、別の入力ソースを対象にする場合は、`init.lua` 内の `CONFIG` テーブルを適宜書き換えてカスタマイズしてください。
 
 ## Tip: Coding with AI / AIとの共同開発
 
