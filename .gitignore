@@ -1,0 +1,11 @@
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Hammerspoon log files
+*.log
+
+# Other system/IDE files
+.vscode/
+.history/
