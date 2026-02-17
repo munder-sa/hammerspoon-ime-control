@@ -34,7 +34,14 @@ M.config = {
         retryInterval = 0.1,
         retryCount = 5,
         alertDuration = 0.5,
-        showAlert = true
+        showAlert = true,
+        useSourceChangedWatcher = true, -- Set to false to avoid conflict with other modules
+        
+        -- Timing settings (in seconds)
+        applyDelay = 0.02,
+        focusDelay = 0.1,
+        alertDelay = 0.1,
+        keyTapDelay = 0.001 -- 1ms for physical key tap emulation
     }
 }
 
@@ -44,9 +51,16 @@ M.config = {
 local STATE = {
     lastKnownIME = nil,
     alertTimer = nil,
+    alertUUID = nil,
     inputWatcher = nil,
     enforcementTimer = nil,
-    systemWatcher = nil
+    systemWatcher = nil,
+    watchdogTimer = nil,
+    windowFilter = nil,
+    focusTimer = nil,
+    applyTimer = nil,
+    hotkeyTimer = nil,
+    keyUpTimers = {}
 }
 
 -- =============================================================================
@@ -56,16 +70,28 @@ local STATE = {
 --- Post a JIS key event with a small delay between down/up
 local function postJISKey(keyCode)
     hs.eventtap.event.newKeyEvent({}, keyCode, true):post()
-    -- Use a very small delay for physical key emulation stability
-    hs.timer.usleep(1000)
-    hs.eventtap.event.newKeyEvent({}, keyCode, false):post()
+    
+    -- Requirement 1 (Revised): Use a table to manage multiple concurrent keyUp timers.
+    -- This prevents keyUp events from being cancelled by subsequent keyDown events.
+    local timer
+    timer = hs.timer.doAfter(M.config.behavior.keyTapDelay, function()
+        hs.eventtap.event.newKeyEvent({}, keyCode, false):post()
+        if timer then
+            STATE.keyUpTimers[timer] = nil
+        end
+    end)
+    STATE.keyUpTimers[timer] = timer
 end
 
 --- Apply IME source and sync all layers
 local function applyIME(sourceID)
     if not sourceID then return end
 
-    -- Stop existing retry timer
+    -- Stop existing timers to prevent race conditions
+    if STATE.applyTimer then
+        STATE.applyTimer:stop()
+        STATE.applyTimer = nil
+    end
     if STATE.enforcementTimer then
         STATE.enforcementTimer:stop()
         STATE.enforcementTimer = nil
@@ -74,15 +100,25 @@ local function applyIME(sourceID)
     -- Update cache
     STATE.lastKnownIME = sourceID
     
-    local forceKey = (sourceID == M.config.sources.eng) and M.config.keycodes.eisu or M.config.keycodes.kana
+    -- Determine forceKey only for known sources (safety fallback)
+    local forceKey = nil
+    if sourceID == M.config.sources.eng then
+        forceKey = M.config.keycodes.eisu
+    elseif sourceID == M.config.sources.jpn then
+        forceKey = M.config.keycodes.kana
+    end
 
     -- Step 1: Attempt via API
-    hs.keycodes.currentSourceID(sourceID)
+    local success = hs.keycodes.currentSourceID(sourceID)
+    if not success then
+        logger:e(string.format("Failed to set source ID: %s", sourceID))
+    end
     
     -- Step 2: Immediate check and fallback to physical key
-    hs.timer.doAfter(0.02, function()
+    -- Requirement 5: Use config for applyDelay
+    STATE.applyTimer = hs.timer.doAfter(M.config.behavior.applyDelay, function()
         local current = hs.keycodes.currentSourceID()
-        if current ~= sourceID then
+        if current ~= sourceID and forceKey then
             postJISKey(forceKey)
         end
 
@@ -96,7 +132,7 @@ local function applyIME(sourceID)
             end,
             function()
                 hs.keycodes.currentSourceID(sourceID)
-                postJISKey(forceKey)
+                if forceKey then postJISKey(forceKey) end
             end,
             M.config.behavior.retryInterval
         )
@@ -115,9 +151,12 @@ local function toggleIME()
     -- Visual feedback
     if M.config.behavior.showAlert then
         if STATE.alertTimer then STATE.alertTimer:stop() end
-        STATE.alertTimer = hs.timer.doAfter(0.1, function()
-            hs.alert.closeAll()
-            hs.alert.show(label, M.config.behavior.alertDuration)
+        -- Requirement 5: Use config for alertDelay
+        STATE.alertTimer = hs.timer.doAfter(M.config.behavior.alertDelay, function()
+            if STATE.alertUUID then
+                hs.alert.closeSpecific(STATE.alertUUID)
+            end
+            STATE.alertUUID = hs.alert.show(label, M.config.behavior.alertDuration)
         end)
     end
 end
@@ -146,12 +185,18 @@ local function isBindingMatch(keyCode, flags, bindingConfig)
 end
 
 local function handleKeyEvent(event)
+    -- Ignore autorepeat events (Requirement 7 & Point 3 in Review)
+    local isAutoRepeat = (event:getProperty(hs.eventtap.event.properties.keyboardEventAutorepeat) or 0) ~= 0
+    if isAutoRepeat then return false end
+
     local keyCode = event:getKeyCode()
     local flags = event:getFlags()
     
     -- Toggle IME
     if isBindingMatch(keyCode, flags, M.config.bindings.toggle) then
-        hs.timer.doAfter(0, toggleIME)
+        -- Requirement 1: Use separate timer for hotkeys to avoid collision with focusTimer
+        if STATE.hotkeyTimer then STATE.hotkeyTimer:stop() end
+        STATE.hotkeyTimer = hs.timer.doAfter(0, toggleIME)
         return true
     end
 
@@ -168,8 +213,56 @@ end
 -- 5. API / モジュール公開関数
 -- =============================================================================
 
+--- Stop IME control and cleanup all resources
+function M.stop()
+    -- Stop all timers
+    local timers = {
+        "alertTimer", "enforcementTimer", "watchdogTimer", 
+        "focusTimer", "applyTimer", "hotkeyTimer"
+    }
+    for _, name in ipairs(timers) do
+        if STATE[name] then
+            STATE[name]:stop()
+            STATE[name] = nil
+        end
+    end
+
+    -- Requirement 1 (Revised): Stop all concurrent keyUp timers
+    for t, _ in pairs(STATE.keyUpTimers) do
+        t:stop()
+    end
+    STATE.keyUpTimers = {}
+
+    -- Stop and cleanup watchers
+    if STATE.inputWatcher then
+        STATE.inputWatcher:stop()
+        STATE.inputWatcher = nil
+    end
+    if STATE.windowFilter then
+        STATE.windowFilter:unsubscribeAll()
+        STATE.windowFilter = nil
+    end
+    if STATE.systemWatcher then
+        STATE.systemWatcher:stop()
+        STATE.systemWatcher = nil
+    end
+
+    -- Requirement 2: Don't call inputSourceChanged(nil) here to avoid breaking other modules.
+    -- We just stop our own logic by clearing STATE and stopping timers above.
+
+    if STATE.alertUUID then
+        hs.alert.closeSpecific(STATE.alertUUID)
+        STATE.alertUUID = nil
+    end
+
+    logger:i("Stopped and cleaned up")
+end
+
 --- Start IME control
 function M.start(userConfig)
+    -- Prevent multiple instances
+    M.stop()
+
     -- Override default config with user config
     if userConfig then
         for k, v in pairs(userConfig) do
@@ -184,30 +277,41 @@ function M.start(userConfig)
     -- Initialize State
     STATE.lastKnownIME = hs.keycodes.currentSourceID() or M.config.sources.eng
 
-    -- 1. IME Change Watcher
-    hs.keycodes.inputSourceChanged(function()
-        local current = hs.keycodes.currentSourceID()
-        if current and current ~= STATE.lastKnownIME then
-            applyIME(current)
-        end
-    end)
+    -- 1. IME Change Watcher (Optional, Requirement 3)
+    if M.config.behavior.useSourceChangedWatcher then
+        hs.keycodes.inputSourceChanged(function()
+            local current = hs.keycodes.currentSourceID()
+            -- Modified Requirement 2: Only update state and stop ongoing enforcements
+            if current and current ~= STATE.lastKnownIME then
+                STATE.lastKnownIME = current
+                if STATE.applyTimer then STATE.applyTimer:stop() end
+                if STATE.enforcementTimer then STATE.enforcementTimer:stop() end
+            end
+        end)
+    end
 
     -- 2. Hotkey Watcher (EventTap)
     STATE.inputWatcher = hs.eventtap.new({hs.eventtap.event.types.keyDown}, handleKeyEvent)
     STATE.inputWatcher:start()
 
-    -- 3. Watchdog
-    hs.timer.doEvery(M.config.behavior.watchdogInterval, function()
+    -- 3. Watchdog (Requirement 1: Store reference to prevent GC)
+    STATE.watchdogTimer = hs.timer.doEvery(M.config.behavior.watchdogInterval, function()
         if STATE.inputWatcher and not STATE.inputWatcher:isEnabled() then
             STATE.inputWatcher:start()
             logger:w("Watchdog: Restarted input watcher")
         end
     end)
 
-    -- 4. Window Focus Watcher
-    local windowFilter = hs.window.filter.new()
-    windowFilter:subscribe(hs.window.filter.windowFocused, function()
-        hs.timer.doAfter(0.1, function() applyIME(hs.keycodes.currentSourceID()) end)
+    -- 4. Window Focus Watcher (Requirement 1: Store reference to prevent GC)
+    STATE.windowFilter = hs.window.filter.new()
+    STATE.windowFilter:subscribe(hs.window.filter.windowFocused, function()
+        -- Prevent overlapping focus timers (Requirement 1 & 2)
+        if STATE.focusTimer then
+            STATE.focusTimer:stop()
+        end
+        STATE.focusTimer = hs.timer.doAfter(M.config.behavior.focusDelay, function()
+            applyIME(hs.keycodes.currentSourceID())
+        end)
     end)
 
     -- 5. System Watcher (Stability for sleep/wake)
