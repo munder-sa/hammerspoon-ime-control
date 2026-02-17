@@ -3,12 +3,14 @@
 -- =============================================================================
 
 --- @class IMECtrl
+--- @class IMECtrl
 local M = {}
 local logger = hs.logger.new('IMECtrl', 'info')
 
 -- =============================================================================
 -- 1. Configuration / 設定
 -- =============================================================================
+
 
 M.config = {
     -- Input Source IDs
@@ -44,12 +46,15 @@ M.config = {
         focusDelay = 0.1,
         alertDelay = 0.1,
         keyTapDelay = 0.001
+        keyTapDelay = 0.001
     }
 }
 
 -- =============================================================================
 -- 2. Internal State Management / 内部状態管理
+-- 2. Internal State Management / 内部状態管理
 -- =============================================================================
+
 
 local STATE = {
     lastKnownIME = nil,
@@ -180,6 +185,7 @@ end
 
 --- Post a JIS key event with a small delay between down/up
 --- @param keyCode number JIS keycode
+--- @param keyCode number JIS keycode
 local function postJISKey(keyCode)
     hs.eventtap.event.newKeyEvent({}, keyCode, true):post()
     
@@ -187,7 +193,9 @@ local function postJISKey(keyCode)
     timer = hs.timer.doAfter(M.config.behavior.keyTapDelay, function()
         hs.eventtap.event.newKeyEvent({}, keyCode, false):post()
         if timer then STATE.keyUpTimers[timer] = nil end
+        if timer then STATE.keyUpTimers[timer] = nil end
     end)
+    STATE.keyUpTimers[timer] = true
     STATE.keyUpTimers[timer] = true
 end
 
@@ -197,8 +205,13 @@ end
 
 --- Apply IME source and sync all layers
 --- @param sourceID string Input source ID
+--- @param sourceID string Input source ID
 local function applyIME(sourceID)
     if not sourceID then return end
+
+    -- Reset ongoing enforcements
+    timerManager.stop("apply")
+    timerManager.stop("enforcement")
 
     -- Reset ongoing enforcements
     timerManager.stop("apply")
@@ -214,11 +227,14 @@ local function applyIME(sourceID)
     end
 
     -- Attempt via API
+    -- Attempt via API
     local success = hs.keycodes.currentSourceID(sourceID)
     if not success then
         logger:e(string.format("Failed to set source ID: %s", sourceID))
     end
     
+    -- Fallback to physical key and retry logic
+    timerManager.start("apply", M.config.behavior.applyDelay, function()
     -- Fallback to physical key and retry logic
     timerManager.start("apply", M.config.behavior.applyDelay, function()
         local current = hs.keycodes.currentSourceID()
@@ -293,6 +309,7 @@ local function isBindingMatch(keyCode, flags, bindingConfig)
 end
 
 --- Primary key event handler
+--- Primary key event handler
 local function handleKeyEvent(event)
     local isAutoRepeat = (event:getProperty(hs.eventtap.event.properties.keyboardEventAutorepeat) or 0) ~= 0
     if isAutoRepeat then return false end
@@ -301,6 +318,7 @@ local function handleKeyEvent(event)
     local flags = event:getFlags()
     
     if isBindingMatch(keyCode, flags, M.config.bindings.toggle) then
+        timerManager.start("hotkey", 0, toggleIME)
         timerManager.start("hotkey", 0, toggleIME)
         return true
     end
@@ -358,6 +376,17 @@ local function loadConfig(userConfig)
         end
     end
 end
+--- Load and merge configuration
+local function loadConfig(userConfig)
+    if not userConfig then return end
+    for k, v in pairs(userConfig) do
+        if type(v) == "table" and type(M.config[k]) == "table" then
+            for subK, subV in pairs(v) do M.config[k][subK] = subV end
+        else
+            M.config[k] = v
+        end
+    end
+end
 
 --- Start IME control
 --- @param userConfig table? Optional user configuration
@@ -370,6 +399,7 @@ function M.start(userConfig)
     STATE.lastKnownIME = hs.keycodes.currentSourceID() or M.config.sources.eng
 
     -- 1. IME Change Watcher
+    -- 1. IME Change Watcher
     if M.config.behavior.useSourceChangedWatcher then
         STATE.sourceChangedEnabled = true
         if not STATE.sourceChangedInstalled then
@@ -378,6 +408,8 @@ function M.start(userConfig)
                 local current = hs.keycodes.currentSourceID()
                 if current and current ~= STATE.lastKnownIME then
                     STATE.lastKnownIME = current
+                    timerManager.stop("apply")
+                    timerManager.stop("enforcement")
                     timerManager.stop("apply")
                     timerManager.stop("enforcement")
                 end
@@ -389,9 +421,12 @@ function M.start(userConfig)
     end
 
     -- 2. Hotkey Watcher
+    -- 2. Hotkey Watcher
     STATE.inputWatcher = hs.eventtap.new({hs.eventtap.event.types.keyDown}, handleKeyEvent)
     STATE.inputWatcher:start()
 
+    -- 3. Watchdog
+    timerManager.every("watchdog", M.config.behavior.watchdogInterval, function()
     -- 3. Watchdog
     timerManager.every("watchdog", M.config.behavior.watchdogInterval, function()
         if STATE.inputWatcher and not STATE.inputWatcher:isEnabled() then
@@ -401,17 +436,21 @@ function M.start(userConfig)
     end)
 
     -- 4. Window Focus Watcher
+    -- 4. Window Focus Watcher
     STATE.windowFilter = hs.window.filter.new()
     STATE.windowFilter:subscribe(hs.window.filter.windowFocused, function()
+        timerManager.start("focus", M.config.behavior.focusDelay, function()
         timerManager.start("focus", M.config.behavior.focusDelay, function()
             applyIME(hs.keycodes.currentSourceID())
         end)
     end)
 
     -- 5. System Watcher
+    -- 5. System Watcher
     STATE.systemWatcher = hs.caffeinate.watcher.new(function(event)
         if event == hs.caffeinate.watcher.systemDidWake or
            event == hs.caffeinate.watcher.screensDidUnlock then
+            logger:i("System wake/unlock detected")
             logger:i("System wake/unlock detected")
             if STATE.inputWatcher then
                 STATE.inputWatcher:stop()
