@@ -17,7 +17,7 @@ M.config = {
 
     -- Key Bindings
     bindings = {
-        toggle = { key = "f12", modifiers = {"shift"} },
+        toggle = { key = "f12", modifiers = {"shift"}},
         debug  = { key = "f11", modifiers = {"shift"} }
     },
 
@@ -45,48 +45,62 @@ local STATE = {
     lastKnownIME = nil,
     alertTimer = nil,
     inputWatcher = nil,
-    enforcementTimer = nil
+    enforcementTimer = nil,
+    systemWatcher = nil
 }
 
 -- =============================================================================
 -- 3. Core Logic / コアロジック
 -- =============================================================================
 
---- Post a JIS key event
+--- Post a JIS key event with a small delay between down/up
 local function postJISKey(keyCode)
     hs.eventtap.event.newKeyEvent({}, keyCode, true):post()
+    -- Use a very small delay for physical key emulation stability
+    hs.timer.usleep(1000)
     hs.eventtap.event.newKeyEvent({}, keyCode, false):post()
 end
 
 --- Apply IME source and sync all layers
 local function applyIME(sourceID)
+    if not sourceID then return end
+
     -- Stop existing retry timer
     if STATE.enforcementTimer then
         STATE.enforcementTimer:stop()
         STATE.enforcementTimer = nil
     end
 
-    -- First attempt
-    hs.keycodes.currentSourceID(sourceID)
+    -- Update cache
     STATE.lastKnownIME = sourceID
     
     local forceKey = (sourceID == M.config.sources.eng) and M.config.keycodes.eisu or M.config.keycodes.kana
-    postJISKey(forceKey)
 
-    -- Retry logic for Chromium-based apps
-    local count = 0
-    STATE.enforcementTimer = hs.timer.doWhile(
-        function()
-            count = count + 1
-            local current = hs.keycodes.currentSourceID()
-            return count <= M.config.behavior.retryCount and current ~= sourceID
-        end,
-        function()
-            hs.keycodes.currentSourceID(sourceID)
+    -- Step 1: Attempt via API
+    hs.keycodes.currentSourceID(sourceID)
+    
+    -- Step 2: Immediate check and fallback to physical key
+    hs.timer.doAfter(0.02, function()
+        local current = hs.keycodes.currentSourceID()
+        if current ~= sourceID then
             postJISKey(forceKey)
-        end,
-        M.config.behavior.retryInterval
-    )
+        end
+
+        -- Step 3: Retry logic for stubborn apps (Chromium, etc.)
+        local count = 0
+        STATE.enforcementTimer = hs.timer.doWhile(
+            function()
+                count = count + 1
+                local currentNow = hs.keycodes.currentSourceID()
+                return count <= M.config.behavior.retryCount and currentNow ~= sourceID
+            end,
+            function()
+                hs.keycodes.currentSourceID(sourceID)
+                postJISKey(forceKey)
+            end,
+            M.config.behavior.retryInterval
+        )
+    end)
 end
 
 --- Toggle between English and Japanese
@@ -173,7 +187,9 @@ function M.start(userConfig)
     -- 1. IME Change Watcher
     hs.keycodes.inputSourceChanged(function()
         local current = hs.keycodes.currentSourceID()
-        if current ~= STATE.lastKnownIME then applyIME(current) end
+        if current and current ~= STATE.lastKnownIME then
+            applyIME(current)
+        end
     end)
 
     -- 2. Hotkey Watcher (EventTap)
@@ -193,6 +209,20 @@ function M.start(userConfig)
     windowFilter:subscribe(hs.window.filter.windowFocused, function()
         hs.timer.doAfter(0.1, function() applyIME(hs.keycodes.currentSourceID()) end)
     end)
+
+    -- 5. System Watcher (Stability for sleep/wake)
+    STATE.systemWatcher = hs.caffeinate.watcher.new(function(event)
+        if event == hs.caffeinate.watcher.systemDidWake or
+           event == hs.caffeinate.watcher.screensDidUnlock then
+            logger:i("System wake/unlock detected. Resetting watchers.")
+            if STATE.inputWatcher then
+                STATE.inputWatcher:stop()
+                STATE.inputWatcher:start()
+            end
+            applyIME(hs.keycodes.currentSourceID())
+        end
+    end)
+    STATE.systemWatcher:start()
     
     logger:i("Initialized")
 end
