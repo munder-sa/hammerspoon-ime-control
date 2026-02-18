@@ -20,21 +20,15 @@ Chromium系ブラウザやDeskflow等のバーチャルキーボードでの利�
 - **カスタマイズ可能**: キーバインド、入力ソースID、各種タイミング設定を簡単に変更できます。
 - **日英併記**: コード内のコメントは日英併記されています。
 
-## Technical Details / 技術的な詳細
+## Installation / インストール
 
-This script uses specific JIS keyboard scan codes to bypass application-level caching:
-- **JIS Eisu (102)**: Forces English input mode.
-- **JIS Kana (104)**: Forces Japanese input mode.
-- **F19 (80)**: Used as a dummy key to refresh the macOS event loop during IME toggle.
+1. **Install Hammerspoon**: Download and install [Hammerspoon](https://www.hammerspoon.org/).
+2. **Setup Scripts**: Place both `init.lua` and `ime.lua` in your `~/.hammerspoon/` directory.
+3. **Reload Configuration**: Click **"Reload Config"** from the Hammerspoon menu bar icon.
 
-If you are using a different keyboard layout (e.g., US, ISO) or want to target different input methods, you can modify the configuration in `init.lua`.
-
-このスクリプトは、アプリ層のキャッシュを回避するために特定のJISキーコードを使用しています：
-- **JIS英数 (102)**: 英数入力モードを強制します。
-- **JISかな (104)**: 日本語入力モードを強制します。
-- **F19 (80)**: IME切り替え時にmacOSのイベントループをリフレッシュするためのダミーキーとして使用します。
-
-他のキーボード配列（US配列やISO配列など）を使用している場合や、別の入力ソースを対象にする場合は、`init.lua` 内で設定をカスタマイズしてください。
+1. **Hammerspoonのインストール**: [Hammerspoon](https://www.hammerspoon.org/)をダウンロードしてインストールします。
+2. **スクリプトの配置**: `init.lua` と `ime.lua` の両方を `~/.hammerspoon/` ディレクトリに配置します。
+3. **設定のリロード**: Hammerspoonのメニューバーアイコンから **"Reload Config"** を実行します。
 
 ## Keybindings / キーバインド
 
@@ -70,15 +64,21 @@ ime.start({
 })
 ```
 
-## Installation / インストール
+## Technical Details / 技術的な詳細
 
-1. Install [Hammerspoon](https://www.hammerspoon.org/).
-2. Place both `init.lua` and `ime.lua` in your `~/.hammerspoon/` directory.
-3. Reload the Hammerspoon configuration.
+This script uses specific JIS keyboard scan codes to bypass application-level caching:
+- **JIS Eisu (102)**: Forces English input mode.
+- **JIS Kana (104)**: Forces Japanese input mode.
+- **F19 (80)**: Used as a dummy key to refresh the macOS event loop during IME toggle.
 
-1. [Hammerspoon](https://www.hammerspoon.org/)をインストールします。
-2. `init.lua` と `ime.lua` の両方を `~/.hammerspoon/` ディレクトリに配置します。
-3. Hammerspoonの設定をリロードします。
+If you are using a different keyboard layout (e.g., US, ISO) or want to target different input methods, you can modify the configuration in `init.lua`.
+
+このスクリプトは、アプリ層のキャッシュを回避するために特定のJISキーコードを使用しています：
+- **JIS英数 (102)**: 英数入力モードを強制します。
+- **JISかな (104)**: 日本語入力モードを強制します。
+- **F19 (80)**: IME切り替え時にmacOSのイベントループをリフレッシュするためのダミーキーとして使用します。
+
+他のキーボード配列（US配列やISO配列など）を使用している場合や、別の入力ソースを対象にする場合は、`init.lua` 内で設定をカスタマイズしてください。
 
 ## License / ライセンス
 
