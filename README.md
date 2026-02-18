@@ -9,13 +9,15 @@ Chromium系ブラウザやDeskflow等のバーチャルキーボードでの利�
 ## Features / 特徴
 
 - **Force Synchronization**: Simultaneously triggers macOS API and physical JIS keycodes (102/104) to ensure the IME state is updated across all applications.
-- **Chromium & Deskflow Support**: Solves the common "IME stuck" issue in Chrome, Edge, and during remote operation via Deskflow/Synergy.
+- **Watchdog & System Recovery**: Periodically monitors the input watcher and automatically restarts/re-applies IME settings upon system wake or screen unlock.
 - **Focus Tracking**: Automatically refreshes and synchronizes IME state when switching windows.
+- **Customizable**: Easy to configure keybindings, input sources, and timing parameters.
 - **Multilingual Support**: Comments in both English and Japanese.
 
 - **強制同期**: macOS APIと物理JISキーコード(102/104)を同時に発行し、すべてのアプリでIME状態を確実に更新します。
-- **Chromium & Deskflow 対応**: ChromeやEdge、またDeskflow等のリモート操作ソフトで発生する「IME切り替えの遅延や失敗」を解決します。
+- **ウォッチドッグ & システム復帰**: 定期的に入力監視の状態をチェックし、システムのスリープ復帰や画面ロック解除時に自動で再起動・IMEの再適用を行います。
 - **フォーカス追従**: ウィンドウを切り替えた際に、自動的にIME状態をリフレッシュして同期します。
+- **カスタマイズ可能**: キーバインド、入力ソースID、各種タイミング設定を簡単に変更できます。
 - **日英併記**: コード内のコメントは日英併記されています。
 
 ## Technical Details / 技術的な詳細
@@ -23,36 +25,59 @@ Chromium系ブラウザやDeskflow等のバーチャルキーボードでの利�
 This script uses specific JIS keyboard scan codes to bypass application-level caching:
 - **JIS Eisu (102)**: Forces English input mode.
 - **JIS Kana (104)**: Forces Japanese input mode.
+- **F19 (80)**: Used as a dummy key to refresh the macOS event loop during IME toggle.
 
-If you are using a different keyboard layout (e.g., US, ISO) or want to target different input methods, you can modify the `CONFIG` table in `init.lua` accordingly.
+If you are using a different keyboard layout (e.g., US, ISO) or want to target different input methods, you can modify the configuration in `init.lua`.
 
 このスクリプトは、アプリ層のキャッシュを回避するために特定のJISキーコードを使用しています：
 - **JIS英数 (102)**: 英数入力モードを強制します。
 - **JISかな (104)**: 日本語入力モードを強制します。
+- **F19 (80)**: IME切り替え時にmacOSのイベントループをリフレッシュするためのダミーキーとして使用します。
 
-他のキーボード配列（US配列やISO配列など）を使用している場合や、別の入力ソースを対象にする場合は、`init.lua` 内の `CONFIG` テーブルを適宜書き換えてカスタマイズしてください。
-
-## Tip: Coding with AI / AIとの共同開発
-
-This script was refined with the help of AI. We highly recommend using AI coding assistants (like Cline, GitHub Copilot, etc.) to customize or extend this script. AI can help you quickly identify the correct `currentSourceID` for your specific environment or help you map different key combinations.
-
-このスクリプトのリファクタリングと改善は、AIの支援を受けて行われました。このスクリプトを自分の環境に合わせてカスタマイズしたり、機能を拡張したりする際には、AIコーディングアシスタント（ClineやGitHub Copilotなど）の活用を強くお勧めします。あなたの環境に最適な `currentSourceID` の特定や、新しいキーバインドの設定なども、AIと一緒に進めることでよりスムーズに行えます。
+他のキーボード配列（US配列やISO配列など）を使用している場合や、別の入力ソースを対象にする場合は、`init.lua` 内で設定をカスタマイズしてください。
 
 ## Keybindings / キーバインド
 
 | Action / 動作 | Shortcut / ショートカット |
 | :--- | :--- |
-| Toggle IME (Eng/Jpn) / IME切り替え | `Cmd` + `Shift` + `F12` |
+| Toggle IME (Eng/Jpn) / IME切り替え | `Shift` + `F12` |
 | Show Debug Info / デバッグ情報表示 | `Shift` + `F11` |
+
+## Configuration / 設定方法
+
+You can customize the behavior by passing a configuration table to `ime.start()` in your `init.lua`.
+
+`init.lua` 内で `ime.start()` に設定テーブルを渡すことで、動作をカスタマイズできます。
+
+```lua
+local ime = require("ime")
+
+ime.start({
+    -- Example: Customizing Input Source IDs
+    sources = {
+        eng = "com.apple.keylayout.US", -- US Keyboard
+        jpn = "com.apple.inputmethod.Kotoeri.Roman" -- macOS Standard Japanese
+    },
+    -- Example: Customizing Key Bindings
+    bindings = {
+        toggle = { key = "space", modifiers = {"cmd", "shift"}}, -- Cmd+Shift+Space
+    },
+    -- Example: Adjusting Alert behavior
+    behavior = {
+        showAlert = true,
+        alertDuration = 0.8
+    }
+})
+```
 
 ## Installation / インストール
 
 1. Install [Hammerspoon](https://www.hammerspoon.org/).
-2. Place `init.lua` in your `~/.hammerspoon/` directory.
+2. Place both `init.lua` and `ime.lua` in your `~/.hammerspoon/` directory.
 3. Reload the Hammerspoon configuration.
 
 1. [Hammerspoon](https://www.hammerspoon.org/)をインストールします。
-2. `init.lua` を `~/.hammerspoon/` ディレクトリに配置します。
+2. `init.lua` と `ime.lua` の両方を `~/.hammerspoon/` ディレクトリに配置します。
 3. Hammerspoonの設定をリロードします。
 
 ## License / ライセンス
