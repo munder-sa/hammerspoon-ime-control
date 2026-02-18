@@ -284,8 +284,8 @@ local function isBindingMatch(keyCode, flags, bindingConfig)
         allowed[mod] = true
     end
     
-    -- Strict check including capslock
-    for _, mod in ipairs({"cmd", "alt", "shift", "ctrl", "fn", "capslock"}) do
+    -- Strict check excluding fn and capslock (allow fn key for function keys)
+    for _, mod in ipairs({"cmd", "alt", "shift", "ctrl"}) do
         if flags[mod] and not allowed[mod] then return false end
     end
     
