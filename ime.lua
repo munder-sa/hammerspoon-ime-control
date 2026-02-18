@@ -37,10 +37,10 @@ M.config = {
         retryCount = 5,
         alertDuration = 0.5,
         showAlert = true,
-        useSourceChangedWatcher = false, -- Default to false for better compatibility
+        useSourceChangedWatcher = true, -- Enable for better tracking
         
         -- Timing settings (in seconds)
-        applyDelay = 0.01,
+        applyDelay = 0.05,  -- Increase delay for sync stability
         focusDelay = 0.3,
         alertDelay = 0.02,
         keyTapDelay = 0.005
@@ -224,14 +224,16 @@ local function applyIME(sourceID, force)
         forceKey = M.config.keycodes.kana
     end
 
-    -- 1. Double Trigger: API call and Physical key simultaneously
-    hs.keycodes.currentSourceID(sourceID)
+    -- 1. Force Physical Key First (More reliable than API in some cases)
     if forceKey then
         postJISKey(forceKey)
     end
-    
-    -- 2. Enforcement: Retry logic if still not applied
+
+    -- 2. API call after a short delay to let the physical key process
     timerManager.start("apply", M.config.behavior.applyDelay, function()
+        hs.keycodes.currentSourceID(sourceID)
+        
+        -- 3. Enforcement: Retry logic if still not applied
         if hs.keycodes.currentSourceID() ~= sourceID then
             local count = 0
             timerManager.doWhile("enforcement", 
@@ -240,8 +242,8 @@ local function applyIME(sourceID, force)
                     return count <= M.config.behavior.retryCount and hs.keycodes.currentSourceID() ~= sourceID
                 end,
                 function()
-                    hs.keycodes.currentSourceID(sourceID)
                     if forceKey then postJISKey(forceKey) end
+                    hs.keycodes.currentSourceID(sourceID)
                 end,
                 M.config.behavior.retryInterval
             )
