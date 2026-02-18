@@ -1,20 +1,19 @@
 # Hammerspoon IME Control Script
 
-This is a script for **Hammerspoon** that provides robust IME (Input Method Editor) switching for macOS.
-It is optimized for Chromium-based browsers and virtual keyboard software like Deskflow.
+This is a script for **Hammerspoon** that provides robust IME (Input Method Editor) switching for macOS, specifically optimized for users who frequently switch between English and **CJK (Chinese, Japanese, Korean)** input methods.
+It is highly effective for Chromium-based browsers and virtual keyboard software like Deskflow.
 
-これは **Hammerspoon** で動作する、macOS用の堅牢なIME切り替えスクリプトです。
-Chromium系ブラウザやDeskflow等のバーチャルキーボードでの利用に最適化されています。
+これは **Hammerspoon** で動作する、macOS用の堅牢なIME切り替えスクリプトです。特に英語と **CJK（中国語・日本語・韓国語）** 入力を頻繁に切り替える環境に最適化されており、Chromium系ブラウザやDeskflow等のバーチャルキーボードでの利用に最適化されています。
 
 ## Features / 特徴
 
-- **Force Synchronization**: Simultaneously triggers macOS API and physical JIS keycodes (102/104) to ensure the IME state is updated across all applications.
+- **CJK Optimized Synchronization**: Simultaneously triggers macOS API and physical JIS keycodes (102/104) to ensure the IME state is updated reliably, even for complex CJK input methods.
 - **Watchdog & System Recovery**: Periodically monitors the input watcher and automatically restarts/re-applies IME settings upon system wake or screen unlock.
 - **Focus Tracking**: Automatically refreshes and synchronizes IME state when switching windows.
 - **Customizable**: Easy to configure keybindings, input sources, and timing parameters.
 - **Multilingual Support**: Comments in both English and Japanese.
 
-- **強制同期**: macOS APIと物理JISキーコード(102/104)を同時に発行し、すべてのアプリでIME状態を確実に更新します。
+- **CJK最適化された同期**: macOS APIと物理JISキーコード(102/104)を同時に発行し、複雑なCJK入力メソッドであってもIME状態を確実に更新します。
 - **ウォッチドッグ & システム復帰**: 定期的に入力監視の状態をチェックし、システムのスリープ復帰や画面ロック解除時に自動で再起動・IMEの再適用を行います。
 - **フォーカス追従**: ウィンドウを切り替えた際に、自動的にIME状態をリフレッシュして同期します。
 - **カスタマイズ可能**: キーバインド、入力ソースID、各種タイミング設定を簡単に変更できます。
@@ -71,14 +70,14 @@ This script uses specific JIS keyboard scan codes to bypass application-level ca
 - **JIS Kana (104)**: Forces Japanese input mode.
 - **F19 (80)**: Used as a dummy key to refresh the macOS event loop during IME toggle.
 
-If you are using a different keyboard layout (e.g., US, ISO) or want to target different input methods, you can modify the configuration in `init.lua`.
+While the default settings are for Japanese (JIS), the logic can be applied to Chinese or Korean by updating the `sources` in the configuration.
 
 このスクリプトは、アプリ層のキャッシュを回避するために特定のJISキーコードを使用しています：
 - **JIS英数 (102)**: 英数入力モードを強制します。
 - **JISかな (104)**: 日本語入力モードを強制します。
 - **F19 (80)**: IME切り替え時にmacOSのイベントループをリフレッシュするためのダミーキーとして使用します。
 
-他のキーボード配列（US配列やISO配列など）を使用している場合や、別の入力ソースを対象にする場合は、`init.lua` 内で設定をカスタマイズしてください。
+デフォルトは日本語向けの設定になっていますが、設定の `sources` を更新することで中国語や韓国語の入力ソースにも対応可能です。
 
 ## License / ライセンス
 
