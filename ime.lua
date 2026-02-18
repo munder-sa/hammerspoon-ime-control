@@ -224,15 +224,15 @@ local function applyIME(sourceID, force)
         forceKey = M.config.keycodes.kana
     end
 
-    -- 1. Primary: API call
+    -- 1. Double Trigger: API call and Physical key simultaneously
     hs.keycodes.currentSourceID(sourceID)
+    if forceKey then
+        postJISKey(forceKey)
+    end
     
-    -- 2. Secondary: Fallback to physical key with small delay
+    -- 2. Enforcement: Retry logic if still not applied
     timerManager.start("apply", M.config.behavior.applyDelay, function()
         if hs.keycodes.currentSourceID() ~= sourceID then
-            if forceKey then postJISKey(forceKey) end
-
-            -- 3. Retry loop (Enforcement)
             local count = 0
             timerManager.doWhile("enforcement", 
                 function()
@@ -257,7 +257,6 @@ local function toggleIME()
     local label  = (target == M.config.sources.jpn) and "🇯🇵 日本語" or "Aa 英数"
 
     applyIME(target, true) -- Use force for manual toggle
-    postJISKey(M.config.keycodes.f19)
     
     if M.config.behavior.showAlert then
         timerManager.start("alert", M.config.behavior.alertDelay, function()
