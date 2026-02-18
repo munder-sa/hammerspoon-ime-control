@@ -40,9 +40,9 @@ M.config = {
         useSourceChangedWatcher = false, -- Default to false for better compatibility
         
         -- Timing settings (in seconds)
-        applyDelay = 0.02,
+        applyDelay = 0.005,
         focusDelay = 0.1,
-        alertDelay = 0.1,
+        alertDelay = 0.01,
         keyTapDelay = 0.001
     }
 }
