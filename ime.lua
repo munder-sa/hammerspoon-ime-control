@@ -4,7 +4,7 @@
 
 --- @class IMECtrl
 local M = {}
-local logger = hs.logger.new('IMECtrl', 'info')
+local logger = hs.logger.new('IMECtrl', 'debug')
 
 -- =============================================================================
 -- 1. Configuration / 設定
@@ -199,6 +199,7 @@ end
 --- @param sourceID string Input source ID
 local function applyIME(sourceID)
     if not sourceID then return end
+    logger:d(string.format("applyIME called: %s", sourceID))
 
     -- Reset ongoing enforcements
     timerManager.stop("apply")
@@ -246,6 +247,7 @@ end
 
 --- Toggle between English and Japanese
 local function toggleIME()
+    logger:d("toggleIME called")
     local current = hs.keycodes.currentSourceID()
     local target = (current == M.config.sources.eng) and M.config.sources.jpn or M.config.sources.eng
     local label  = (target == M.config.sources.jpn) and "🇯🇵 日本語" or "Aa 英数"
@@ -300,6 +302,8 @@ local function handleKeyEvent(event)
     local keyCode = event:getKeyCode()
     local flags = event:getFlags()
     
+    logger:d(string.format("Key event: code=%d, cmd=%s, shift=%s", keyCode, tostring(flags.cmd), tostring(flags.shift)))
+
     if isBindingMatch(keyCode, flags, M.config.bindings.toggle) then
         timerManager.start("hotkey", 0, toggleIME)
         return true
