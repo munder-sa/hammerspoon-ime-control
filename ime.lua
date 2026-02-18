@@ -32,18 +32,18 @@ M.config = {
 
     -- Behavior Settings
     behavior = {
-        watchdogInterval = 15, -- 10 -> 15 少しゆとりを持たせる
-        retryInterval = 0.05, -- 0.1 -> 0.05 より速くリトライ
-        retryCount = 8,      -- 5 -> 8 リトライ回数を増やす
+        watchdogInterval = 30,
+        retryInterval = 0.1,
+        retryCount = 5,
         alertDuration = 0.5,
         showAlert = true,
         useSourceChangedWatcher = false, -- Default to false for better compatibility
         
         -- Timing settings (in seconds)
-        applyDelay = 0.01,   -- 0.005 -> 0.01 少し安定させる
-        focusDelay = 0.4,    -- 0.3 -> 0.4 フォーカス移動への追従をさらに慎重に
-        alertDelay = 0.01,
-        keyTapDelay = 0.01   -- 0.001 -> 0.01 キーダウン/アップの間隔を広げて確実に認識させる
+        applyDelay = 0.01,
+        focusDelay = 0.3,
+        alertDelay = 0.02,
+        keyTapDelay = 0.005
     }
 }
 
@@ -203,12 +203,12 @@ local function applyIME(sourceID, force)
     if not sourceID then return end
     
     local now = hs.timer.secondsSinceEpoch()
-    -- Skip if redundant call within 150ms and same source (prevent loops)
-    if not force and sourceID == STATE.lastKnownIME and (now - STATE.lastApplyTime) < 0.15 then
+    -- Skip if redundant call (Debounce)
+    if not force and sourceID == STATE.lastKnownIME and (now - STATE.lastApplyTime) < 0.2 then
         return
     end
 
-    logger:d(string.format("applyIME processing: %s", sourceID))
+    logger:d(string.format("applyIME: %s", sourceID))
     STATE.lastApplyTime = now
 
     -- Reset ongoing enforcements
@@ -224,20 +224,15 @@ local function applyIME(sourceID, force)
         forceKey = M.config.keycodes.kana
     end
 
-    -- 1. First attempt: Use physical key immediately (most robust for Chromium)
-    if forceKey then
-        postJISKey(forceKey)
-    end
-
-    -- 2. Second attempt: API call with slight delay
+    -- 1. Primary: API call
+    hs.keycodes.currentSourceID(sourceID)
+    
+    -- 2. Secondary: Fallback to physical key with small delay
     timerManager.start("apply", M.config.behavior.applyDelay, function()
-        local success = hs.keycodes.currentSourceID(sourceID)
-        if not success then
-            logger:e(string.format("Failed to set source ID: %s", sourceID))
-        end
-
-        -- 3. Retry loop if still not applied
         if hs.keycodes.currentSourceID() ~= sourceID then
+            if forceKey then postJISKey(forceKey) end
+
+            -- 3. Retry loop (Enforcement)
             local count = 0
             timerManager.doWhile("enforcement", 
                 function()
@@ -414,16 +409,9 @@ function M.start(userConfig)
 
     -- 3. Watchdog
     timerManager.every("watchdog", M.config.behavior.watchdogInterval, function()
-        if STATE.inputWatcher then
-            if not STATE.inputWatcher:isEnabled() then
-                STATE.inputWatcher:start()
-                logger:w("Watchdog: Restarted disabled input watcher")
-            else
-                -- Proactively restart to prevent silent timeout
-                STATE.inputWatcher:stop()
-                STATE.inputWatcher:start()
-                logger:d("Watchdog: Proactively cycled input watcher")
-            end
+        if STATE.inputWatcher and not STATE.inputWatcher:isEnabled() then
+            STATE.inputWatcher:start()
+            logger:w("Watchdog: Restarted input watcher")
         end
     end)
 
