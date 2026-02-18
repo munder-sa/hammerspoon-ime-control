@@ -32,7 +32,7 @@ M.config = {
 
     -- Behavior Settings
     behavior = {
-        watchdogInterval = 30,
+        watchdogInterval = 10,
         retryInterval = 0.1,
         retryCount = 5,
         alertDuration = 0.5,
@@ -41,7 +41,7 @@ M.config = {
         
         -- Timing settings (in seconds)
         applyDelay = 0.005,
-        focusDelay = 0.1,
+        focusDelay = 0.3,
         alertDelay = 0.01,
         keyTapDelay = 0.001
     }
@@ -415,9 +415,16 @@ function M.start(userConfig)
 
     -- 3. Watchdog
     timerManager.every("watchdog", M.config.behavior.watchdogInterval, function()
-        if STATE.inputWatcher and not STATE.inputWatcher:isEnabled() then
-            STATE.inputWatcher:start()
-            logger:w("Watchdog: Restarted input watcher")
+        if STATE.inputWatcher then
+            if not STATE.inputWatcher:isEnabled() then
+                STATE.inputWatcher:start()
+                logger:w("Watchdog: Restarted disabled input watcher")
+            else
+                -- Proactively restart to prevent silent timeout
+                STATE.inputWatcher:stop()
+                STATE.inputWatcher:start()
+                logger:d("Watchdog: Proactively cycled input watcher")
+            end
         end
     end)
 
