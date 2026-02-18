@@ -32,18 +32,18 @@ M.config = {
 
     -- Behavior Settings
     behavior = {
-        watchdogInterval = 10,
-        retryInterval = 0.1,
-        retryCount = 5,
+        watchdogInterval = 15, -- 10 -> 15 少しゆとりを持たせる
+        retryInterval = 0.05, -- 0.1 -> 0.05 より速くリトライ
+        retryCount = 8,      -- 5 -> 8 リトライ回数を増やす
         alertDuration = 0.5,
         showAlert = true,
         useSourceChangedWatcher = false, -- Default to false for better compatibility
         
         -- Timing settings (in seconds)
-        applyDelay = 0.005,
-        focusDelay = 0.3,
+        applyDelay = 0.01,   -- 0.005 -> 0.01 少し安定させる
+        focusDelay = 0.4,    -- 0.3 -> 0.4 フォーカス移動への追従をさらに慎重に
         alertDelay = 0.01,
-        keyTapDelay = 0.001
+        keyTapDelay = 0.01   -- 0.001 -> 0.01 キーダウン/アップの間隔を広げて確実に認識させる
     }
 }
 
@@ -203,8 +203,8 @@ local function applyIME(sourceID, force)
     if not sourceID then return end
     
     local now = hs.timer.secondsSinceEpoch()
-    -- Skip if redundant call within 100ms and same source (prevent loops)
-    if not force and sourceID == STATE.lastKnownIME and (now - STATE.lastApplyTime) < 0.1 then
+    -- Skip if redundant call within 150ms and same source (prevent loops)
+    if not force and sourceID == STATE.lastKnownIME and (now - STATE.lastApplyTime) < 0.15 then
         return
     end
 
@@ -224,20 +224,19 @@ local function applyIME(sourceID, force)
         forceKey = M.config.keycodes.kana
     end
 
-    -- Attempt via API
-    local success = hs.keycodes.currentSourceID(sourceID)
-    if not success then
-        logger:e(string.format("Failed to set source ID: %s", sourceID))
+    -- 1. First attempt: Use physical key immediately (most robust for Chromium)
+    if forceKey then
+        postJISKey(forceKey)
     end
-    
-    -- Fallback to physical key and retry logic
+
+    -- 2. Second attempt: API call with slight delay
     timerManager.start("apply", M.config.behavior.applyDelay, function()
-        local current = hs.keycodes.currentSourceID()
-        if current ~= sourceID and forceKey then
-            postJISKey(forceKey)
+        local success = hs.keycodes.currentSourceID(sourceID)
+        if not success then
+            logger:e(string.format("Failed to set source ID: %s", sourceID))
         end
 
-        -- Requirement 2 (Optimized): Only start doWhile if source is still mismatched
+        -- 3. Retry loop if still not applied
         if hs.keycodes.currentSourceID() ~= sourceID then
             local count = 0
             timerManager.doWhile("enforcement", 
