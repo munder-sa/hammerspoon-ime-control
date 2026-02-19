@@ -396,7 +396,9 @@ end
 
 --- Check if the event matches a specific binding configuration
 local function isBindingMatch(keyCode, flags, bindingConfig)
-    if not bindingConfig or keyCode ~= hs.keycodes.map[bindingConfig.key] then return false end
+    if not bindingConfig then return false end
+    local targetCode = hs.keycodes.map[bindingConfig.key]
+    if keyCode ~= targetCode then return false end
     
     local allowed = {}
     for _, mod in ipairs(bindingConfig.modifiers) do
@@ -404,9 +406,11 @@ local function isBindingMatch(keyCode, flags, bindingConfig)
         allowed[mod] = true
     end
     
-    -- Strict check excluding fn and capslock (allow fn key for function keys)
+    -- Strict check: ensure NO OTHER modifiers are pressed
     for _, mod in ipairs({"cmd", "alt", "shift", "ctrl"}) do
-        if flags[mod] and not allowed[mod] then return false end
+        if flags[mod] and not allowed[mod] then
+            return false
+        end
     end
     
     return true
@@ -427,7 +431,8 @@ local function handleKeyEvent(event)
         return false
     end
 
-    logger:d(string.format("Key event: code=%d, cmd=%s, shift=%s", keyCode, tostring(flags.cmd), tostring(flags.shift)))
+    -- Temporarily verbose for debugging
+    logger:d(string.format("Key event: code=%d, flags=%s", keyCode, hs.inspect(flags)))
 
     if isBindingMatch(keyCode, flags, M.config.bindings.toggle) then
         logger:d("toggleIME triggered (SecureInput=" .. tostring(hs.eventtap.isSecureInputEnabled()) .. ")")
