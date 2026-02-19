@@ -41,7 +41,8 @@ M.config = {
 
         -- Shortcut Fallback Settings (for CJKV environments)
         useShortcutFallback = true,
-        useCjkBounce = false,   -- Enable as last resort for CJK instability
+        useCjkBounce = false,     -- Enable as last resort for CJK instability
+        useChromiumNudge = false, -- Experimental: Nudge Chromium to re-sync state
         sourceSwitchShortcut = {
             mods = {"ctrl"},
             key  = "space",
@@ -222,6 +223,8 @@ end
 
 --- Nudge Chromium to re-sync its input state
 local function chromiumNudge()
+    if not M.config.behavior.useChromiumNudge then return end
+    
     local app = hs.application.frontmostApplication()
     if not app then return end
     if not isChromium(app:bundleID()) then return end
@@ -297,16 +300,14 @@ local function applyIME(sourceID, force)
     local now = hs.timer.secondsSinceEpoch()
     
     -- Improved Debounce:
-    -- Skip only if:
-    -- 1. Not a forced call
-    -- 2. Target source matches both internal state AND actual system state
-    -- 3. Called very recently
-    if not force and sourceID == STATE.lastKnownIME and sourceID == current and (now - STATE.lastApplyTime) < 0.2 then
+    -- Skip only if NOT a forced call AND target matches current state AND called very recently
+    local recentlyApplied = (now - STATE.lastApplyTime) < 0.2
+    if not force and sourceID == current and recentlyApplied then
         return
     end
 
     logger:d(string.format("applyIME: %s (Current: %s, Last: %s, Force: %s)", 
-        sourceID, tostring(current), tostring(STATE.lastKnownIME), tostring(force)))
+        sourceID, tostring(current), tostring(STATE.lastKnownIME), tostring(force or "nil")))
     
     STATE.lastApplyTime = now
 
