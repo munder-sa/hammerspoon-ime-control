@@ -38,12 +38,23 @@ M.config = {
         alertDuration = 0.5,
         showAlert = true,
         useSourceChangedWatcher = true, -- Enable for better tracking
+
+        -- Shortcut Fallback Settings (for CJKV environments)
+        useShortcutFallback = true,
+        sourceSwitchShortcut = {
+            mods = {"ctrl"},
+            key  = "space",
+            delayUS = 5000,     -- delay in microseconds
+            interval = 0.05,    -- interval between presses in seconds
+            maxPresses = 6
+        },
         
         -- Timing settings (in seconds)
         applyDelay = 0.05,  -- Increase delay for sync stability
         focusDelay = 0.3,
         alertDelay = 0.02,
-        keyTapDelay = 0.005
+        keyTapDelay = 0.005,
+        justAppliedThreshold = 1.0 -- threshold for inputSourceChanged guard
     }
 }
 
@@ -192,6 +203,35 @@ local function postJISKey(keyCode)
     STATE.keyUpTimers[timer] = true
 end
 
+--- Fallback mechanism using OS shortcuts
+--- @param targetID string Input source ID
+local function fallbackByShortcut(targetID)
+    local sc = M.config.behavior.sourceSwitchShortcut
+    if not (M.config.behavior.useShortcutFallback and sc) then return end
+
+    logger:d(string.format("Starting shortcut fallback for %s", targetID))
+    local presses = 0
+    timerManager.doWhile("shortcutFallback",
+        function()
+            presses = presses + 1
+            local current = hs.keycodes.currentSourceID()
+            local shouldContinue = presses <= sc.maxPresses and current ~= targetID
+            if not shouldContinue then
+                if current == targetID then
+                    logger:i(string.format("Shortcut fallback succeeded after %d presses", presses - 1))
+                else
+                    logger:w(string.format("Shortcut fallback failed after %d presses", sc.maxPresses))
+                end
+            end
+            return shouldContinue
+        end,
+        function()
+            hs.eventtap.keyStroke(sc.mods, sc.key, sc.delayUS or 5000)
+        end,
+        sc.interval or 0.05
+    )
+end
+
 -- =============================================================================
 -- 5. Core Logic / コアロジック
 -- =============================================================================
@@ -202,19 +242,28 @@ end
 local function applyIME(sourceID, force)
     if not sourceID then return end
     
+    local current = hs.keycodes.currentSourceID()
     local now = hs.timer.secondsSinceEpoch()
-    -- Skip if redundant call (Debounce)
-    if not force and sourceID == STATE.lastKnownIME and (now - STATE.lastApplyTime) < 0.2 then
+    
+    -- Improved Debounce:
+    -- Skip only if:
+    -- 1. Not a forced call
+    -- 2. Target source matches both internal state AND actual system state
+    -- 3. Called very recently
+    if not force and sourceID == STATE.lastKnownIME and sourceID == current and (now - STATE.lastApplyTime) < 0.2 then
         return
     end
 
-    logger:d(string.format("applyIME: %s", sourceID))
+    logger:d(string.format("applyIME: %s (Current: %s, Last: %s, Force: %s)", 
+        sourceID, tostring(current), tostring(STATE.lastKnownIME), tostring(force)))
+    
     STATE.lastApplyTime = now
 
     -- Reset ongoing enforcements
     timerManager.stop("apply")
     timerManager.stop("enforcement")
 
+    -- Update internal state immediately to prevent race conditions during applyDelay
     STATE.lastKnownIME = sourceID
     
     local forceKey = nil
@@ -239,7 +288,15 @@ local function applyIME(sourceID, force)
             timerManager.doWhile("enforcement", 
                 function()
                     count = count + 1
-                    return count <= M.config.behavior.retryCount and hs.keycodes.currentSourceID() ~= sourceID
+                    local current = hs.keycodes.currentSourceID()
+                    local shouldContinue = count <= M.config.behavior.retryCount and current ~= sourceID
+                    
+                    if not shouldContinue and current ~= sourceID then
+                        -- 4. Final Fallback: Use OS shortcut if still not switched
+                        fallbackByShortcut(sourceID)
+                    end
+                    
+                    return shouldContinue
                 end,
                 function()
                     if forceKey then postJISKey(forceKey) end
@@ -392,10 +449,19 @@ function M.start(userConfig)
             hs.keycodes.inputSourceChanged(function()
                 if not STATE.sourceChangedEnabled then return end
                 local current = hs.keycodes.currentSourceID()
+                local now = hs.timer.secondsSinceEpoch()
+                local justApplied = (now - STATE.lastApplyTime) < (M.config.behavior.justAppliedThreshold or 1.0)
+
                 if current and current ~= STATE.lastKnownIME then
                     STATE.lastKnownIME = current
-                    timerManager.stop("apply")
-                    timerManager.stop("enforcement")
+                    
+                    -- Don't stop enforcement if it was just applied (prevents Chrome/macOS auto-switch bounce)
+                    if not justApplied then
+                        timerManager.stop("apply")
+                        timerManager.stop("enforcement")
+                    else
+                        logger:d("inputSourceChanged during switching -> keep enforcement")
+                    end
                 end
             end)
             STATE.sourceChangedInstalled = true
