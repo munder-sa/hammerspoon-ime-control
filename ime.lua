@@ -41,12 +41,13 @@ M.config = {
 
         -- Shortcut Fallback Settings (for CJKV environments)
         useShortcutFallback = true,
+        useCjkBounce = false,   -- Enable as last resort for CJK instability
         sourceSwitchShortcut = {
             mods = {"ctrl"},
             key  = "space",
-            delayUS = 5000,     -- delay in microseconds
-            interval = 0.05,    -- interval between presses in seconds
-            maxPresses = 6
+            delayUS = 50000,    -- increased for better reliability (50ms)
+            interval = 0.1,     -- increased interval between presses (100ms)
+            maxPresses = 10     -- increased max tries
         },
         
         -- Timing settings (in seconds)
@@ -192,15 +193,65 @@ end
 
 --- Post a JIS key event with a small delay between down/up
 --- @param keyCode number JIS keycode
-local function postJISKey(keyCode)
-    hs.eventtap.event.newKeyEvent({}, keyCode, true):post()
+--- @param app hs.application? Optional application to post to
+local function postJISKey(keyCode, app)
+    hs.eventtap.event.newKeyEvent({}, keyCode, true):post(app)
     
     local timer
     timer = hs.timer.doAfter(M.config.behavior.keyTapDelay, function()
-        hs.eventtap.event.newKeyEvent({}, keyCode, false):post()
+        hs.eventtap.event.newKeyEvent({}, keyCode, false):post(app)
         if timer then STATE.keyUpTimers[timer] = nil end
     end)
     STATE.keyUpTimers[timer] = true
+end
+
+--- Check if the bundle ID belongs to a Chromium-based browser
+--- @param bundleID string?
+--- @return boolean
+local function isChromium(bundleID)
+    local t = {
+        ["com.google.Chrome"] = true,
+        ["com.google.Chrome.canary"] = true,
+        ["com.microsoft.Edge"] = true,
+        ["com.brave.Browser"] = true,
+        ["com.vivaldi.Vivaldi"] = true,
+        ["com.operasoftware.Opera"] = true,
+    }
+    return bundleID ~= nil and t[bundleID] ~= nil
+end
+
+--- Nudge Chromium to re-sync its input state
+local function chromiumNudge()
+    local app = hs.application.frontmostApplication()
+    if not app then return end
+    if not isChromium(app:bundleID()) then return end
+
+    -- Post a harmless key (F19) to the app to trigger input state refresh
+    timerManager.start("chromiumNudge", 0.02, function()
+        postJISKey(M.config.keycodes.f19, app)
+    end)
+end
+
+--- Fallback mechanism using CJK bounce workaround
+--- @param targetID string Input source ID
+local function cjkBounceWorkaround(targetID)
+    if not M.config.behavior.useCjkBounce or targetID ~= M.config.sources.jpn then return end
+    local sc = M.config.behavior.sourceSwitchShortcut
+    if not sc then return end
+
+    logger:d("Starting CJK bounce workaround")
+    -- 1. Ensure target is in history
+    hs.keycodes.currentSourceID(targetID)
+
+    -- 2. Escape to English
+    timerManager.start("cjkBounce1", 0.03, function()
+        hs.keycodes.currentSourceID(M.config.sources.eng)
+
+        -- 3. Bounce back using "previous source" shortcut
+        timerManager.start("cjkBounce2", 0.03, function()
+            hs.eventtap.keyStroke(sc.mods, sc.key, sc.delayUS or 200000)
+        end)
+    end)
 end
 
 --- Fallback mechanism using OS shortcuts
@@ -226,7 +277,7 @@ local function fallbackByShortcut(targetID)
             return shouldContinue
         end,
         function()
-            hs.eventtap.keyStroke(sc.mods, sc.key, sc.delayUS or 5000)
+            hs.eventtap.keyStroke(sc.mods, sc.key, sc.delayUS or 50000)
         end,
         sc.interval or 0.05
     )
@@ -281,6 +332,9 @@ local function applyIME(sourceID, force)
     -- 2. API call after a short delay to let the physical key process
     timerManager.start("apply", M.config.behavior.applyDelay, function()
         hs.keycodes.currentSourceID(sourceID)
+
+        -- Nudge Chromium-based browsers to sync state
+        chromiumNudge()
         
         -- 3. Enforcement: Retry logic if still not applied
         if hs.keycodes.currentSourceID() ~= sourceID then
@@ -292,8 +346,9 @@ local function applyIME(sourceID, force)
                     local shouldContinue = count <= M.config.behavior.retryCount and current ~= sourceID
                     
                     if not shouldContinue and current ~= sourceID then
-                        -- 4. Final Fallback: Use OS shortcut if still not switched
+                        -- 4. Final Fallbacks: Use OS shortcuts/bounce if still not switched
                         fallbackByShortcut(sourceID)
+                        cjkBounceWorkaround(sourceID)
                     end
                     
                     return shouldContinue
@@ -374,6 +429,7 @@ local function handleKeyEvent(event)
     logger:d(string.format("Key event: code=%d, cmd=%s, shift=%s", keyCode, tostring(flags.cmd), tostring(flags.shift)))
 
     if isBindingMatch(keyCode, flags, M.config.bindings.toggle) then
+        logger:d("toggleIME triggered (SecureInput=" .. tostring(hs.eventtap.isSecureInputEnabled()) .. ")")
         timerManager.start("hotkey", 0, toggleIME)
         return true
     end
