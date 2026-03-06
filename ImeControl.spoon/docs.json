@@ -1,0 +1,61 @@
+[
+  {
+    "Constant": [],
+    "Constructor": [],
+    "Deprecated": [],
+    "Field": [],
+    "Function": [],
+    "Method": [
+      {
+        "def": "ImeControl:start(userConfig)",
+        "desc": "Start ImeControl with optional user configuration.",
+        "doc": "Start ImeControl with optional user configuration.\n\nParameters:\n * userConfig - Optional table with sources, appRules, and behavior settings\n\nReturns:\n * The ImeControl object",
+        "name": "start",
+        "parameters": ["* userConfig - Optional configuration table"],
+        "returns": ["* The ImeControl object"],
+        "signature": "ImeControl:start(userConfig)",
+        "stripped_doc": "",
+        "type": "Method"
+      },
+      {
+        "def": "ImeControl:stop()",
+        "desc": "Stop ImeControl and clean up all resources.",
+        "doc": "Stop ImeControl and clean up all resources including watchers, hotkeys, and timers.\n\nReturns:\n * The ImeControl object",
+        "name": "stop",
+        "parameters": [],
+        "returns": ["* The ImeControl object"],
+        "signature": "ImeControl:stop()",
+        "stripped_doc": "",
+        "type": "Method"
+      },
+      {
+        "def": "ImeControl:bindHotkeys(map)",
+        "desc": "Bind hotkeys for IME control.",
+        "doc": "Bind hotkeys for IME control such as toggle and debug.\n\nParameters:\n * map - A table with optional keys:\n   * toggle - {mods, key} to toggle between eng and jpn\n   * debug - {mods, key} to show debug info\n\nReturns:\n * The ImeControl object",
+        "name": "bindHotkeys",
+        "parameters": ["* map - Table of hotkey mappings"],
+        "returns": ["* The ImeControl object"],
+        "signature": "ImeControl:bindHotkeys(map)",
+        "stripped_doc": "",
+        "type": "Method"
+      }
+    ],
+    "Variable": [
+      {
+        "def": "ImeControl._defaultConfig",
+        "desc": "Default configuration table with sources, appRules, and behavior settings.",
+        "doc": "Default configuration table with sources, appRules, and behavior settings. Can be customized via the userConfig parameter in start().",
+        "name": "_defaultConfig",
+        "signature": "ImeControl._defaultConfig",
+        "stripped_doc": "",
+        "type": "Variable"
+      }
+    ],
+    "desc": "Robust IME switching for Hammerspoon",
+    "doc": "Robust IME (Input Method Editor) switching for macOS. Provides reliable switching between English and CJK input methods with app-based auto-switching, system recovery, and optional hotkey support.",
+    "items": [],
+    "name": "ImeControl",
+    "plist": [],
+    "type": "spoon"
+  }
+]

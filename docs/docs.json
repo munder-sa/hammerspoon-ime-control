@@ -1,0 +1,8 @@
+[
+  {
+    "name": "ImeControl",
+    "version": "1.0.1",
+    "author": "munder-sa",
+    "desc": "Robust IME (Input Method Editor) switching for Hammerspoon"
+  }
+]
