@@ -6,7 +6,7 @@
 
 local obj = {}
 obj.name = "ImeControl"
-obj.version = "1.0.0"
+obj.version = "1.0.1"
 obj.author = "munder-sa"
 obj.license = "Unlicense"
 obj.__index = obj
